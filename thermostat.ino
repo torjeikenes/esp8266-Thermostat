@@ -17,11 +17,14 @@
   - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
   - Select your ESP8266 in "Tools -> Board"
 */
+// #include <Arduino.h>
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
 #include <Adafruit_SSD1306.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "config.h"
 // Update these with values suitable for your network.
@@ -44,7 +47,14 @@ int value = 0;
 
 DHT dht(DHTPIN, DHTTYPE);
 
-// Adafruit_SSD1306 ssd1306(128, 64);
+#define OLED_ADDRESS 0x3C
+
+Adafruit_SSD1306 oled(128, 64);
+
+char TargetTempStr[] = "00.0";
+float CurrentTemp = 0.0;
+
+uint8_t TempUpdated = 0;
 
 void setup_wifi()
 {
@@ -83,17 +93,10 @@ void callback(char *topic, byte *payload, unsigned int length)
   }
   Serial.println();
 
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1')
-  {
-    digitalWrite(BUILTIN_LED, LOW); // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is active low on the ESP-01)
-  }
-  else
-  {
-    digitalWrite(BUILTIN_LED, HIGH); // Turn the LED off by making the voltage HIGH
-  }
+  strncpy(TargetTempStr, (char *)payload, length);
+
+
+  TempUpdated = 1;
 }
 
 void reconnect()
@@ -110,9 +113,10 @@ void reconnect()
     {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("/esp8266/temperature", "22");
+      // client.publish("/esp8266/currentTemp", "22");
       // ... and resubscribe
-      client.subscribe("inTopic");
+      client.subscribe("/Stue/thermostat/targetTemp");
+      client.subscribe("/Stue/thermostat/outsideTemp");
     }
     else
     {
@@ -125,8 +129,48 @@ void reconnect()
   }
 }
 
+void displayString(char *string, uint8_t size, uint16_t color, uint8_t x, uint8_t y)
+{
+  oled.setTextSize(size);   // Normal 1:1 pixel scale
+  oled.setTextColor(color); // Draw white text
+  oled.setCursor(x, y);     // Start at top-left corner
+  // oled.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  for (int i = 0; string[i] != '\0'; i++)
+  {
+    oled.write(string[i]);
+  }
+  // oled.display();
+  //  oled.drawChar(10, 10, 'T', SSD1306_WHITE, 0x0000, 4);
+  //  oled.display();
+}
+
+void displayTemp(char *string, uint8_t size, uint16_t color, uint8_t x, uint8_t y)
+{
+  displayString(string, size, color, x, y);
+  oled.write(248); // Degree symbol
+  oled.write('C');
+}
+
+void displayTemp(float temp, uint8_t size, uint16_t color, uint8_t x, uint8_t y)
+{
+  char tmpString[6];
+  snprintf(tmpString, 6, "%.1f", temp);
+  displayTemp(tmpString, size, color, x, y);
+}
+
+void renderDisplay()
+{
+  oled.clearDisplay();
+  displayTemp(CurrentTemp, 2, SSD1306_WHITE, 0, 0);
+  displayTemp(TargetTempStr, 2, SSD1306_WHITE, 0, 30);
+  oled.display();
+}
+
 void setup()
 {
+  oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS);
+  oled.display();
   pinMode(BUILTIN_LED, OUTPUT); // Initialize the BUILTIN_LED pin as an output
   Serial.begin(115200);
   setup_wifi();
@@ -134,10 +178,7 @@ void setup()
   client.setCallback(callback);
 
   dht.begin();
-}
-
-void display()
-{
+  oled.clearDisplay();
 }
 
 void loop()
@@ -153,15 +194,25 @@ void loop()
   if (now - lastMsg > 2000)
   {
     lastMsg = now;
-    float temperature = dht.readTemperature();
+    CurrentTemp = dht.readTemperature();
+    TempUpdated = 1;
 
     // Serial.print(temperature);
 
+    // oled.clearDisplay();
+    // displayTemp(temperature, 2, SSD1306_WHITE, 0, 0);
+    // oled.display();
+
     //++value;
     // snprintf(msg, MSG_BUFFER_SIZE, "%ld", value);
-    snprintf(msg, MSG_BUFFER_SIZE, "%.1f", temperature);
+    snprintf(msg, MSG_BUFFER_SIZE, "%.1f", CurrentTemp);
     Serial.print("Publish message: ");
     Serial.println(msg);
-    client.publish("/esp8266/temperature", msg);
+    client.publish("/Stue/thermostat/currentTemp", msg);
+  }
+
+  if (TempUpdated)
+  {
+    renderDisplay();
   }
 }
