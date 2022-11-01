@@ -29,11 +29,16 @@
 #include "config.h"
 // Update these with values suitable for your network.
 
+// Defined in config.h
 const char *ssid = SSID;
 const char *password = PASS;
 const char *mqtt_server = MQTT_IP;
 const char *mqtt_user = MQTT_U;
 const char *mqtt_password = MQTT_P;
+
+#define CURRENT_TEMP_TOPIC "/Stue/thermostat/currentTemp"
+#define TARGET_TEMP_TOPIC "/Stue/thermostat/targetTemp"
+#define OUTSIDE_TEMP_TOPIC "/Stue/thermostat/outsideTemp"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -51,7 +56,11 @@ DHT dht(DHTPIN, DHTTYPE);
 
 Adafruit_SSD1306 oled(128, 64);
 
+#define ROT_A_PIN 12 // D6
+#define ROT_B_PIN 13 // D7
+
 char TargetTempStr[] = "00.0";
+char OutsideTempStr[] = "00.0";
 float CurrentTemp = 0.0;
 
 uint8_t TempUpdated = 0;
@@ -93,10 +102,16 @@ void callback(char *topic, byte *payload, unsigned int length)
   }
   Serial.println();
 
-  strncpy(TargetTempStr, (char *)payload, length);
-
-
-  TempUpdated = 1;
+  if (!strcmp(topic, TARGET_TEMP_TOPIC))
+  {
+    strncpy(TargetTempStr, (char *)payload, length);
+    TempUpdated = 1;
+  }
+  else if (!strcmp(topic, TARGET_TEMP_TOPIC))
+  {
+    strncpy(TargetTempStr, (char *)payload, length);
+    TempUpdated = 1;
+  }
 }
 
 void reconnect()
@@ -115,8 +130,8 @@ void reconnect()
       // Once connected, publish an announcement...
       // client.publish("/esp8266/currentTemp", "22");
       // ... and resubscribe
-      client.subscribe("/Stue/thermostat/targetTemp");
-      client.subscribe("/Stue/thermostat/outsideTemp");
+      client.subscribe(TARGET_TEMP_TOPIC);
+      client.subscribe(OUTSIDE_TEMP_TOPIC);
     }
     else
     {
@@ -140,9 +155,6 @@ void displayString(char *string, uint8_t size, uint16_t color, uint8_t x, uint8_
   {
     oled.write(string[i]);
   }
-  // oled.display();
-  //  oled.drawChar(10, 10, 'T', SSD1306_WHITE, 0x0000, 4);
-  //  oled.display();
 }
 
 void displayTemp(char *string, uint8_t size, uint16_t color, uint8_t x, uint8_t y)
@@ -167,6 +179,27 @@ void renderDisplay()
   oled.display();
 }
 
+#define ROT_A (1 << 0)
+#define ROT_B (1 << 1)
+
+// Rotary encoder interrupt function.
+// ICACHE_RAM_ATTR keeps function in internal RAM
+void ICACHE_RAM_ATTR rotEncInterrupt()
+{
+  uint8_t rotBitmask = digitalRead(ROT_A_PIN);
+  rotBitmask |= digitalRead(ROT_B_PIN) << 1;
+
+  // if ((rotBitmask & ROT_A) != (rotBitmask & (ROT_B))){
+  if (rotBitmask == 0x03) // If both are equal
+  {
+    // CCW
+  }
+  else
+  {
+    // CW
+  }
+}
+
 void setup()
 {
   oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS);
@@ -179,6 +212,8 @@ void setup()
 
   dht.begin();
   oled.clearDisplay();
+
+  attachInterrupt(digitalPinToInterrupt(ROT_A_PIN), rotEncInterrupt, FALLING);
 }
 
 void loop()
@@ -208,11 +243,12 @@ void loop()
     snprintf(msg, MSG_BUFFER_SIZE, "%.1f", CurrentTemp);
     Serial.print("Publish message: ");
     Serial.println(msg);
-    client.publish("/Stue/thermostat/currentTemp", msg);
+    client.publish(CURRENT_TEMP_TOPIC, msg);
   }
 
   if (TempUpdated)
   {
+    TempUpdated = 0;
     renderDisplay();
   }
 }
