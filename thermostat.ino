@@ -179,8 +179,8 @@ void renderDisplay()
   oled.display();
 }
 
-#define ROT_A (1 << 0)
-#define ROT_B (1 << 1)
+#define BM_ROT_A (1 << 0)
+#define BM_ROT_B (1 << 1)
 
 // Rotary encoder interrupt function.
 // ICACHE_RAM_ATTR keeps function in internal RAM
@@ -189,14 +189,16 @@ void ICACHE_RAM_ATTR rotEncInterrupt()
   uint8_t rotBitmask = digitalRead(ROT_A_PIN);
   rotBitmask |= digitalRead(ROT_B_PIN) << 1;
 
-  // if ((rotBitmask & ROT_A) != (rotBitmask & (ROT_B))){
-  if (rotBitmask == 0x03) // If both are equal
+  // if ((rotBitmask & BM_ROT_A) != (rotBitmask & (BM_ROT_B)))
+  if (rotBitmask == 0x03 || rotBitmask == 0x00) // If both lsb are equal
   {
     // CCW
+    Serial.println("CCW");
   }
   else
   {
     // CW
+    Serial.println("CW");
   }
 }
 
@@ -213,7 +215,7 @@ void setup()
   dht.begin();
   oled.clearDisplay();
 
-  attachInterrupt(digitalPinToInterrupt(ROT_A_PIN), rotEncInterrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ROT_A_PIN), rotEncInterrupt, CHANGE);
 }
 
 void loop()
