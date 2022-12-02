@@ -17,7 +17,7 @@
   - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
   - Select your ESP8266 in "Tools -> Board"
 */
-// #include <Arduino.h>
+#include <Arduino.h>
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -38,6 +38,7 @@ const char *mqtt_password = MQTT_P;
 
 #define CURRENT_TEMP_TOPIC "/Stue/thermostat/currentTemp"
 #define TARGET_TEMP_TOPIC "/Stue/thermostat/targetTemp"
+#define TARGET_TEMP_CHANGE_TOPIC "/Stue/thermostat/targetTempChange"
 #define OUTSIDE_TEMP_TOPIC "/Stue/thermostat/outsideTemp"
 
 WiFiClient espClient;
@@ -64,6 +65,7 @@ char OutsideTempStr[] = "00.0";
 float CurrentTemp = 0.0;
 
 uint8_t TempUpdated = 0;
+uint8_t RotChanged = 0;
 
 void setup_wifi()
 {
@@ -181,11 +183,15 @@ void renderDisplay()
 
 #define BM_ROT_A (1 << 0)
 #define BM_ROT_B (1 << 1)
+#define BM_CW (1 << 0)
+#define BM_CCW (1 << 1)
 
 // Rotary encoder interrupt function.
 // ICACHE_RAM_ATTR keeps function in internal RAM
 void ICACHE_RAM_ATTR rotEncInterrupt()
 {
+  // Serial.println("ROT");
+
   uint8_t rotBitmask = digitalRead(ROT_A_PIN);
   rotBitmask |= digitalRead(ROT_B_PIN) << 1;
 
@@ -193,12 +199,13 @@ void ICACHE_RAM_ATTR rotEncInterrupt()
   if (rotBitmask == 0x03 || rotBitmask == 0x00) // If both lsb are equal
   {
     // CCW
-    Serial.println("CCW");
+    RotChanged = BM_CCW;
   }
   else
   {
     // CW
-    Serial.println("CW");
+    // Serial.println("CW");
+    RotChanged = BM_CW;
   }
 }
 
@@ -215,6 +222,9 @@ void setup()
   dht.begin();
   oled.clearDisplay();
 
+  pinMode(ROT_A_PIN, INPUT_PULLUP);
+  pinMode(ROT_B_PIN, INPUT_PULLUP);
+
   attachInterrupt(digitalPinToInterrupt(ROT_A_PIN), rotEncInterrupt, CHANGE);
 }
 
@@ -228,7 +238,7 @@ void loop()
   client.loop();
 
   unsigned long now = millis();
-  if (now - lastMsg > 2000)
+  if (now - lastMsg > 10000)
   {
     lastMsg = now;
     CurrentTemp = dht.readTemperature();
@@ -246,6 +256,20 @@ void loop()
     Serial.print("Publish message: ");
     Serial.println(msg);
     client.publish(CURRENT_TEMP_TOPIC, msg);
+  }
+
+  if (RotChanged)
+  {
+    Serial.printf("Rot %d\n", RotChanged);
+    if (RotChanged & BM_CW)
+    {
+      client.publish(TARGET_TEMP_CHANGE_TOPIC, "inc");
+    }
+    else
+    {
+      client.publish(TARGET_TEMP_CHANGE_TOPIC, "dec");
+    }
+    RotChanged = 0;
   }
 
   if (TempUpdated)
