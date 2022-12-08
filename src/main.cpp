@@ -93,12 +93,12 @@ void setup_wifi()
   Serial.println(WiFi.localIP());
 }
 
-void callback(char *topic, byte *payload, unsigned int length)
+void mqttCallback(char *topic, byte *payload, unsigned int length)
 {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
-  for (int i = 0; i < length; i++)
+  for (unsigned int i = 0; i < length; i++)
   {
     Serial.print((char)payload[i]);
   }
@@ -187,8 +187,8 @@ void renderDisplay()
 #define BM_CCW (1 << 1)
 
 // Rotary encoder interrupt function.
-// ICACHE_RAM_ATTR keeps function in internal RAM
-void ICACHE_RAM_ATTR rotEncInterrupt()
+// IRAM_ATTR keeps function in internal RAM
+void IRAM_ATTR rotEncInterrupt()
 {
   // Serial.println("ROT");
 
@@ -213,11 +213,11 @@ void setup()
 {
   oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS);
   oled.display();
-  pinMode(BUILTIN_LED, OUTPUT); // Initialize the BUILTIN_LED pin as an output
+  pinMode(LED_BUILTIN, OUTPUT); // Initialize the BUILTIN_LED pin as an output
   Serial.begin(115200);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
+  client.setCallback(mqttCallback);
 
   dht.begin();
   oled.clearDisplay();
