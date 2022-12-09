@@ -40,6 +40,7 @@ const char *mqtt_password = MQTT_P;
 #define TARGET_TEMP_TOPIC "/Stue/thermostat/targetTemp"
 #define TARGET_TEMP_CHANGE_TOPIC "/Stue/thermostat/targetTempChange"
 #define OUTSIDE_TEMP_TOPIC "/Stue/thermostat/outsideTemp"
+#define OUTSIDE_TEMP_TOPIC "/Stue/thermostat/outsideTemp"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -104,14 +105,14 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
   }
   Serial.println();
 
-  if (!strcmp(topic, TARGET_TEMP_TOPIC))
+  if (!strcmp(topic, TARGET_TEMP_TOPIC)) // If no difference
   {
     strncpy(TargetTempStr, (char *)payload, length);
     TempUpdated = 1;
   }
-  else if (!strcmp(topic, TARGET_TEMP_TOPIC))
+  else if (!strcmp(topic, OUTSIDE_TEMP_TOPIC))
   {
-    strncpy(TargetTempStr, (char *)payload, length);
+    strncpy(OutsideTempStr, (char *)payload, length);
     TempUpdated = 1;
   }
 }
@@ -177,7 +178,8 @@ void renderDisplay()
 {
   oled.clearDisplay();
   displayTemp(CurrentTemp, 2, SSD1306_WHITE, 0, 0);
-  displayTemp(TargetTempStr, 2, SSD1306_WHITE, 0, 30);
+  displayTemp(TargetTempStr, 2, SSD1306_WHITE, 0, 25);
+  displayTemp(OutsideTempStr, 2, SSD1306_WHITE, 0, 50);
   oled.display();
 }
 
