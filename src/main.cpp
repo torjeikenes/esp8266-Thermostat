@@ -62,11 +62,13 @@ Adafruit_SSD1306 oled(128, 64);
 #define ROT_B_PIN 13 // D7
 
 char TargetTempStr[] = "00.0";
-char OutsideTempStr[] = "00.0";
+char OutsideTempStr[] = "+00.0";
 float CurrentTemp = 0.0;
 
 uint8_t TempUpdated = 0;
 uint8_t RotChanged = 0;
+
+uint8_t prevRot = 0;
 
 void setup_wifi()
 {
@@ -192,23 +194,17 @@ void renderDisplay()
 // IRAM_ATTR keeps function in internal RAM
 void IRAM_ATTR rotEncInterrupt()
 {
-  // Serial.println("ROT");
+  // Table that holds valid transitions
+  static int8_t rotEncTable[] = {0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0};
 
-  uint8_t rotBitmask = digitalRead(ROT_A_PIN);
-  rotBitmask |= digitalRead(ROT_B_PIN) << 1;
+  prevRot <<= 2;
 
-  // if ((rotBitmask & BM_ROT_A) != (rotBitmask & (BM_ROT_B)))
-  if (rotBitmask == 0x03 || rotBitmask == 0x00) // If both lsb are equal
-  {
-    // CCW
-    RotChanged = BM_CCW;
-  }
-  else
-  {
-    // CW
-    // Serial.println("CW");
-    RotChanged = BM_CW;
-  }
+  prevRot |= digitalRead(ROT_A_PIN);
+  prevRot |= (digitalRead(ROT_B_PIN) << 1);
+
+  prevRot &= 0x0f;
+
+  RotChanged = rotEncTable[prevRot & 0x0f];
 }
 
 void setup()
@@ -228,6 +224,7 @@ void setup()
   pinMode(ROT_B_PIN, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(ROT_A_PIN), rotEncInterrupt, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ROT_B_PIN), rotEncInterrupt, CHANGE);
 }
 
 void loop()
@@ -246,14 +243,6 @@ void loop()
     CurrentTemp = dht.readTemperature();
     TempUpdated = 1;
 
-    // Serial.print(temperature);
-
-    // oled.clearDisplay();
-    // displayTemp(temperature, 2, SSD1306_WHITE, 0, 0);
-    // oled.display();
-
-    //++value;
-    // snprintf(msg, MSG_BUFFER_SIZE, "%ld", value);
     snprintf(msg, MSG_BUFFER_SIZE, "%.1f", CurrentTemp);
     Serial.print("Publish message: ");
     Serial.println(msg);
@@ -262,15 +251,11 @@ void loop()
 
   if (RotChanged)
   {
-    Serial.printf("Rot %d\n", RotChanged);
-    if (RotChanged & BM_CW)
-    {
-      client.publish(TARGET_TEMP_CHANGE_TOPIC, "inc");
-    }
-    else
-    {
+    if ((prevRot & 0x0f) == 0x0b) // CCW
       client.publish(TARGET_TEMP_CHANGE_TOPIC, "dec");
-    }
+    if ((prevRot & 0x0f) == 0x07) // CW
+      client.publish(TARGET_TEMP_CHANGE_TOPIC, "inc");
+
     RotChanged = 0;
   }
 
